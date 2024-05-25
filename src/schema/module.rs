@@ -26,7 +26,7 @@ pub struct SchemeFieldType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemeFieldTypeKind {
     Normal,
-    Streaming,
+    Stream,
     Sync,
 }
 
@@ -58,7 +58,7 @@ pub(crate) fn create_module(ast: &ASTRoot) -> SchemeModule {
                             ty: SchemeFieldType {
                                 kind: match &x.ty.kind {
                                     ASTTypeKind::Normal => SchemeFieldTypeKind::Normal,
-                                    ASTTypeKind::Streaming => SchemeFieldTypeKind::Streaming,
+                                    ASTTypeKind::Stream => SchemeFieldTypeKind::Stream,
                                     ASTTypeKind::Sync => SchemeFieldTypeKind::Sync,
                                 },
                                 ty_ref: match x.ty.name.as_str() {

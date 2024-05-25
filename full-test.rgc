@@ -1,0 +1,13 @@
+type User {
+    posts: stream Array<Post>,
+    name: string
+}
+
+type Post {
+    title: string,
+    body: stream string,
+    author: User
+    likes: sync integer
+}
+
+remote function getUsers() -> Array<User>

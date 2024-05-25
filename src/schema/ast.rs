@@ -26,14 +26,66 @@ pub(crate) struct ASTField {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ASTType {
     pub kind: ASTTypeKind,
-    pub name: String,
+    pub name: ASTTypeName,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ASTTypeName {
+    pub path: Vec<String>,
+    pub params: Vec<ASTTypeName>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ASTTypeKind {
     Normal,
-    Streaming,
+    Stream,
     Sync,
+}
+
+fn parse_type_name(tokens: &[Token], mut i: usize) -> (ASTTypeName, usize) {
+    let mut path = Vec::new();
+    let mut params = Vec::new();
+    enum State {
+        ExpectingIdentifier,
+        ExpectingOpeningAngleBracket,
+        ExpectingTypeName,
+        ExpectingComma,
+    }
+    let mut state = State::ExpectingIdentifier;
+    loop {
+        match state {
+            State::ExpectingIdentifier => {
+                let token = &tokens[i];
+                if token.ty == TokenType::Identifier {
+                    state = State::ExpectingOpeningAngleBracket;
+                    path.push(token.value.clone());
+                    i += 1;
+                } else {
+                    panic!("Unexpected token: {:?}", token);
+                }
+            }
+            State::ExpectingOpeningAngleBracket => {
+                let token = &tokens[i];
+                if token.ty == TokenType::Punctuation && token.value == "<" {
+                    state = State::ExpectingTypeName;
+                    i += 1;
+                } else {
+                    return (ASTTypeName { path, params }, i);
+                }
+            }
+            State::ExpectingTypeName => {
+                let (typename, n) = parse_type_name(tokens, i);
+                if n != i {
+                    params.push(typename);
+                }
+                i = n;
+                state = State::ExpectingComma;
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
 }
 
 pub(crate) fn gen_ast(tokens: &[Token]) -> ASTRoot {
@@ -121,96 +173,87 @@ pub(crate) fn gen_ast(tokens: &[Token]) -> ASTRoot {
                     panic!("Unexpected token: {:?}", token);
                 }
             }
-            State::TypeDefBlockFieldExpectingTypeKind => {
-                match (&token.ty, token.value.as_str()) {
-                    (&TokenType::Keyword, "normal") => {
-                        state = State::TypeDefBlockFieldExpectingTypeName;
-                        let Some(ASTRootBlock::TypeDef(ref mut typedef)) =
-                            current_block.as_mut()
-                        else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
-                        };
-                        let Some(field) = typedef.fields.last_mut() else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
-                        };
-                        field.ty.kind = ASTTypeKind::Normal;
-                        i += 1;
-                    }
-                    (&TokenType::Keyword, "streaming") => {
-                        state = State::TypeDefBlockFieldExpectingTypeName;
-                        let Some(ASTRootBlock::TypeDef(ref mut typedef)) =
-                            current_block.as_mut()
-                        else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
-                        };
-                        let Some(field) = typedef.fields.last_mut() else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
-                        };
-                        field.ty.kind = ASTTypeKind::Streaming;
-                        i += 1;
-                    }
-                    (&TokenType::Keyword, "sync") => {
-                        state = State::TypeDefBlockFieldExpectingTypeName;
-                        let Some(ASTRootBlock::TypeDef(ref mut typedef)) =
-                            current_block.as_mut()
-                        else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
-                        };
-                        let Some(field) = typedef.fields.last_mut() else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
-                        };
-                        field.ty.kind = ASTTypeKind::Sync;
-
-                        i += 1;
-                    }
-                    (&TokenType::Identifier, _) => {
-                        state = State::TypeDefBlockFieldExpectingComma;
-                        let Some(ASTRootBlock::TypeDef(ref mut typedef)) =
-                            current_block.as_mut()
-                        else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
-                        };
-                        let Some(field) = typedef.fields.last_mut() else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
-                        };
-                        field.ty.kind = ASTTypeKind::Normal;
-                        field.ty.name = token.value.clone();
-                        i += 1;
-                    }
-
-                    (ty, value) => panic!(
-                        "Unexpected token: {:?}",
-                        Token {
-                            ty: ty.clone(),
-                            value: value.to_string(),
-                        }
-                    ),
+            State::TypeDefBlockFieldExpectingTypeKind => match (&token.ty, token.value.as_str()) {
+                (&TokenType::Keyword, "normal") => {
+                    state = State::TypeDefBlockFieldExpectingTypeName;
+                    let Some(ASTRootBlock::TypeDef(ref mut typedef)) = current_block.as_mut()
+                    else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
+                    };
+                    let Some(field) = typedef.fields.last_mut() else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
+                    };
+                    field.ty.kind = ASTTypeKind::Normal;
+                    i += 1;
                 }
-            }
-            State::TypeDefBlockFieldExpectingTypeName => {
-                match (&token.ty, token.value.as_str()) {
-                    (&TokenType::Identifier, typename) => {
-                        state = State::TypeDefBlockFieldExpectingComma;
-                        let Some(ASTRootBlock::TypeDef(ref mut typedef)) =
-                            current_block.as_mut()
-                        else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeName) implies that the current block is a TypeDef, but it is not a TypeDef");
-                        };
-                        let Some(field) = typedef.fields.last_mut() else {
-                            panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeName) implies that the current block contains at least one field, but it does not");
-                        };
-                        field.ty.name = typename.to_string();
-                        i += 1;
-                    }
-                    (ty, value) => panic!(
-                        "Unexpected token: {:?}",
-                        Token {
-                            ty: ty.clone(),
-                            value: value.to_string(),
-                        }
-                    ),
+                (&TokenType::Keyword, "stream") => {
+                    state = State::TypeDefBlockFieldExpectingTypeName;
+                    let Some(ASTRootBlock::TypeDef(ref mut typedef)) = current_block.as_mut()
+                    else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
+                    };
+                    let Some(field) = typedef.fields.last_mut() else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
+                    };
+                    field.ty.kind = ASTTypeKind::Stream;
+                    i += 1;
                 }
-            }
+                (&TokenType::Keyword, "sync") => {
+                    state = State::TypeDefBlockFieldExpectingTypeName;
+                    let Some(ASTRootBlock::TypeDef(ref mut typedef)) = current_block.as_mut()
+                    else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
+                    };
+                    let Some(field) = typedef.fields.last_mut() else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
+                    };
+                    field.ty.kind = ASTTypeKind::Sync;
+
+                    i += 1;
+                }
+                (&TokenType::Identifier, _) => {
+                    state = State::TypeDefBlockFieldExpectingComma;
+                    let Some(ASTRootBlock::TypeDef(ref mut typedef)) = current_block.as_mut()
+                    else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block is a TypeDef, but it is not a TypeDef");
+                    };
+                    let Some(field) = typedef.fields.last_mut() else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeKind) implies that the current block contains at least one field, but it does not");
+                    };
+                    field.ty.kind = ASTTypeKind::Normal;
+                    field.ty.name = token.value.clone();
+                    i += 1;
+                }
+
+                (ty, value) => panic!(
+                    "Unexpected token: {:?}",
+                    Token {
+                        ty: ty.clone(),
+                        value: value.to_string(),
+                    }
+                ),
+            },
+            State::TypeDefBlockFieldExpectingTypeName => match (&token.ty, token.value.as_str()) {
+                (&TokenType::Identifier, typename) => {
+                    state = State::TypeDefBlockFieldExpectingComma;
+                    let Some(ASTRootBlock::TypeDef(ref mut typedef)) = current_block.as_mut()
+                    else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeName) implies that the current block is a TypeDef, but it is not a TypeDef");
+                    };
+                    let Some(field) = typedef.fields.last_mut() else {
+                        panic!("!!!BUG!!! Current parser state (TypeDefBlockFieldExpectingTypeName) implies that the current block contains at least one field, but it does not");
+                    };
+                    field.ty.name = typename.to_string();
+                    i += 1;
+                }
+                (ty, value) => panic!(
+                    "Unexpected token: {:?}",
+                    Token {
+                        ty: ty.clone(),
+                        value: value.to_string(),
+                    }
+                ),
+            },
             State::TypeDefBlockFieldExpectingComma => match (&token.ty, token.value.as_str()) {
                 (&TokenType::Punctuation, ",") => {
                     state = State::TypeDefBlock;

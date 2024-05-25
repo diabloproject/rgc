@@ -30,7 +30,7 @@ pub struct AssemblyFieldType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssemblyFieldTypeKind {
     Normal,
-    Streaming,
+    Stream,
     Sync,
 }
 
@@ -69,19 +69,18 @@ pub fn generate(module: &SchemeModule) -> Assembly {
                     AssemblyTypeRef::Custom(ty)
                 }
             };
-            let f = AssemblyFieldType {
-                kind: match field.ty.kind {
-                    SchemeFieldTypeKind::Normal => AssemblyFieldTypeKind::Normal,
-                    SchemeFieldTypeKind::Streaming => AssemblyFieldTypeKind::Streaming,
-                    SchemeFieldTypeKind::Sync => AssemblyFieldTypeKind::Sync,
-                },
-                ty_ref,
-            };
             (&mut (&*(ty.to_owned())).borrow_mut())
                 .fields
                 .push(AssemblyField {
                     name: field.name.clone(),
-                    ty: f,
+                    ty: AssemblyFieldType {
+                        kind: match field.ty.kind {
+                            SchemeFieldTypeKind::Normal => AssemblyFieldTypeKind::Normal,
+                            SchemeFieldTypeKind::Stream => AssemblyFieldTypeKind::Stream,
+                            SchemeFieldTypeKind::Sync => AssemblyFieldTypeKind::Sync,
+                        },
+                        ty_ref,
+                    },
                 });
         }
     }

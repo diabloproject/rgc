@@ -1,5 +1,5 @@
-const KEYWORDS: &[&str] = &["type", "streaming", "sync"];
-const PUNCTUATIONS: &[char] = &['{', '}', '.', ',', ':', ';'];
+const KEYWORDS: &[&str] = &["type", "stream", "sync"];
+const PUNCTUATIONS: &[char] = &['{', '}', '.', ',', ':', ';', '<', '>'];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TokenType {
@@ -60,7 +60,7 @@ pub(crate) fn tokenize(schema: &str) -> Vec<Token> {
                     current_token = Token::new();
                 }
             }
-            '{' | '}' | '.' | ',' | ':' | ';' => {
+            '{' | '}' | '.' | ',' | ':' | ';' | '<' | '>' => {
                 if !current_token.is_empty() {
                     current_token.finish();
                     tokens.push(current_token);
@@ -82,3 +82,4 @@ pub(crate) fn tokenize(schema: &str) -> Vec<Token> {
     }
     tokens
 }
+
